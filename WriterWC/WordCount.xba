@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="WordCount" script:language="StarBasic">REM  *****  BASIC  *****
+
+&apos; license:
+&apos; ----------------------------------------------------------------------------
+&apos;  &quot;THE BEER-WARE LICENSE&quot; (Revision 42):
+&apos;  &lt;nany@forum.ubuntu-fr.org&gt; wrote this macro. As long as you retain this
+&apos;  notice you can do whatever you want with this stuff. If we meet some day,
+&apos;  and you think this stuff is worth it, you can buy me a beer in return. nany
+&apos; ----------------------------------------------------------------------------
+&apos;
+&apos; licence :
+&apos; ----------------------------------------------------------------------------
+&apos;  &quot;LICENCE BEERWARE&quot; (Révision 42):
+&apos;  &lt;nany@forum.ubuntu-fr.org&gt; a créé cette macro. Tant que vous conservez cet
+&apos;  avertissement, vous pouvez faire ce que vous voulez de ce truc. Si on se
+&apos;  rencontre un jour et que vous pensez que ce truc vaut le coup, vous pouvez
+&apos;  me payer une bière en retour. nany
+&apos; ----------------------------------------------------------------------------
+
+Dim	oDlg As Object
+Dim bDialogShown As Boolean
+
+Sub Main
+rem ----------------------------------------------------------------------
+rem define variables
+Dim document As Object
+Dim dispatcher As Object
+Dim oVC As Object
+Dim oCursor As Object
+Dim oTC As Object
+Dim oStart As Object
+Dim oEnd As Object
+Dim nWC As Integer
+Dim st As String
+Dim sWC As String
+rem ----------------------------------------------------------------------
+On Error GoTo ErrorTreatment
+rem get access to the document
+document   = ThisComponent.CurrentController.Frame
+dispatcher = createUnoService(&quot;com.sun.star.frame.DispatchHelper&quot;)
+rem ----------------------------------------------------------------------
+
+If InStr(document.Title,&quot;Writer&quot;) = 0 Then
+    MsgBox(&quot;Le document actif n’est pas un document Writer.&quot;,MB_OK + MB_ICONSTOP)
+    Exit Sub
+End If
+If ThisComponent.URL = &quot;&quot; Then
+    MsgBox(&quot;Le document actif est un nouveau document.&quot;,MB_OK + MB_ICONSTOP)
+    Exit Sub
+End If
+If ThisComponent.CurrentSelection.ImplementationName = &quot;SwXTextFrame&quot; Then
+    MsgBox(&quot;La sélection actuelle est un cadre, impossible d’y sélectionner du texte.&quot; &amp; Chr$(13) &amp; &quot;Le document actif est peut-être un document d’étiquettes ou de cartes de visite.&quot;,MB_OK + MB_ICONSTOP)
+    Exit Sub
+End If
+sWC = &quot;&quot;
+oVC = ThisComponent.getCurrentController.getViewCursor
+oCursor = oVC.getText.createTextCursorByRange(oVC)
+oCursor.gotoStart(false)
+oVC.gotoRange(oCursor,false)
+oTC = ThisComponent.Text.createTextCursorByRange(oCursor)
+Do &apos;parcours des paragraphes
+    oCursor.gotoEndOfParagraph(false)
+    oTC.gotoRange(oCursor,false)
+    oVC.gotoRange(oCursor,false)
+    oCursor.gotoStartOfParagraph(false)
+    oTC.gotoRange(oCursor,false)
+    oVC.gotoRange(oCursor,false)
+    oCursor.gotoNextSentence(true)
+    Do &apos;parcours des phrases
+        oTC.gotoRange(oCursor,true)
+        oVC.gotoRange(oCursor,true)
+        st = oVC.getString()
+        If Len(st) = 0 Then Exit Do
+        oStart = oTC.getStart()
+        oEnd = oTC.getEnd()
+        nWC = 0
+        oCursor.gotoRange(oStart,false)
+        oVC.gotoRange(oCursor,false)
+        Do &apos;parcours des mots
+            nWC = nWC + 1
+            oCursor.gotoNextWord(true)
+            oVC.gotoRange(oCursor,true)
+        Loop While oVC.getString() &lt;&gt; st
+        nWC = nWC + UBound(Split(st,&quot;’&quot;))
+        nWC = nWC + UBound(Split(st,&quot;-&quot;))
+        If InStr(st,&quot;- &quot;) Then nWC = nWC -2
+        If InStr(st,&quot;- &quot;) Then nWC = nWC -2
+        If InStr(st,&quot;- &quot;) Then nWC = nWC -2
+        If sWC = &quot;&quot; Then
+            sWC = st &amp; &quot; (&quot; &amp; nWC &amp; &quot;)&quot;
+        Else
+            sWC = sWC &amp; Chr$(13) &amp; st &amp; &quot; (&quot; &amp; nWC &amp; &quot;)&quot;
+        End If
+        oCursor.gotoRange(oEnd,false)
+        oTC.gotoRange(oCursor,false)
+        oVC.gotoRange(oCursor,false)
+    Loop While oCursor.gotoNextSentence(false)
+Loop While oCursor.GotoNextParagraph(false)
+oCursor.gotoStart(false)
+oVC.gotoRange(oCursor,false)
+DialogWCShow(sWC,&quot;Nombre de mots par phrase :&quot;)
+Exit Sub
+ErrorTreatment:
+    Select Case Err
+        Case 1
+            MsgBox(&quot;Impossible de sélectionner du texte.&quot; &amp; Chr$(13) &amp; &quot;Le document actif est peut-être un document d’étiquettes ou de cartes de visite.&quot;,MB_OK + MB_ICONSTOP)
+        Case 423
+            MsgBox(&quot;Aucun document ne semble ouvert.&quot;,MB_OK + MB_ICONSTOP)
+        Case Else
+            MsgBox(&quot;Ligne &quot; &amp; Erl &amp; &quot; : &quot; &amp; Err &amp; Chr$(13) &amp; Error$)
+    End Select
+End Sub
+
+
+Sub DialogWCShow (sText As String, Optional sTitle As String)
+
+Dim oLib As Object
+Dim oDialogWC As Object
+Dim oText As Object
+Dim oListenenerTop As Object
+
+DialogLibraries.LoadLibrary(&quot;WriterWC&quot;)
+oLib = DialogLibraries.GetByName(&quot;WriterWC&quot;)
+oDialogWC = oLib.GetByName(&quot;DialogWC&quot;)
+oDlg = CreateUnoDialog(oDialogWC)
+If Not IsMissing(sTitle) Then oDlg.Title = sTitle
+oText = oDlg.GetControl(&quot;TextField1&quot;)
+oText.Text = sText
+bDialogShown = True
+oListenerTop = createUnoListener(&quot;TopListen_&quot;, &quot;com.sun.star.awt.XTopWindowListener&quot;)
+oDlg.addTopWindowlistener(oListenerTop)
+While bDialogShown
+    Wait 20
+    oDlg.setVisible(bDialogShown)
+Wend
+
+End Sub
+
+Sub TopListen_WindowClosing
+    bDialogShown = False
+End Sub
+
+Sub  TopListen_windowOpened
+End Sub
+
+Sub  TopListen_windowClosed
+End Sub
+
+Sub TopListen_windowMinimized
+End Sub
+
+Sub  TopListen_windowNormalized
+End Sub
+
+Sub  TopListen_windowActivated
+End Sub
+
+Sub  TopListen_windowDeactivated
+End Sub
+
+Sub  TopListen_disposing
+End Sub
+
+
+sub SelectText
+rem ----------------------------------------------------------------------
+rem define variables
+Dim document As Object
+Dim dispatcher As Object
+Dim sTextS As String
+Dim nLen_5 As Integer
+rem ----------------------------------------------------------------------
+rem get access to the document
+document   = ThisComponent.CurrentController.Frame
+dispatcher = createUnoService(&quot;com.sun.star.frame.DispatchHelper&quot;)
+rem ----------------------------------------------------------------------
+
+sTextS = oDlg.GetControl(&quot;TextField1&quot;).SelectedText
+nLen_5 = Len(sTextS) - 5
+If nLen_5 &lt; 1 Then
+    nLen_5 = 1
+End if
+If InStr(nLen_5,sTextS,&quot;(&quot;) Then
+    nLeft = InStr(nLen_5,sTextS,&quot;(&quot;) - 3
+Else
+    nLeft = Len(sTextS)
+End If
+
+dispatcher.executeDispatch(document, &quot;.uno:GoToStartOfDoc&quot;, &quot;&quot;, 0, Array())
+
+Dim args1(0) As New com.sun.star.beans.PropertyValue
+args1(0).Name = &quot;SearchItem.SearchString&quot;
+args1(0).Value = Left(sTextS,nLeft)
+
+dispatcher.executeDispatch(document, &quot;.uno:ExecuteSearch&quot;, &quot;&quot;, 0, args1())
+
+end sub
+</script:module>
